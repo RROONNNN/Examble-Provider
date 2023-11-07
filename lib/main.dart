@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 void main() {
   runApp(const MyApp());
@@ -13,9 +15,8 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    print("build in MyAppp\n");
-    return BreadCrumbProvider(
-      create: (context) => BreadCrumbNotifier(),
+    return ProviderWidget(
+      create: (context) => ProviderObject(),
       child: MaterialApp(
         title: 'Flutter Demo',
         theme: ThemeData(
@@ -23,47 +24,8 @@ class MyApp extends StatelessWidget {
           useMaterial3: true,
         ),
         home: MyHomePage(),
-        routes: <String, WidgetBuilder>{
-          '/Addscreen': (BuildContext context) => Addscreen(),
-        },
       ),
     );
-  }
-}
-
-class Addscreen extends StatefulWidget {
-  const Addscreen({super.key});
-
-  @override
-  State<Addscreen> createState() => _AddscreenState();
-}
-
-class _AddscreenState extends State<Addscreen> {
-  TextEditingController _controller = TextEditingController();
-
-  @override
-  Widget build(BuildContext context) {
-    print("build in _AddscreenState\n");
-
-    return Scaffold(
-        appBar: AppBar(
-          title: Text("AddScreen"),
-        ),
-        body: Column(
-          children: [
-            TextFormField(
-              controller: _controller,
-              decoration: InputDecoration(hintText: "Add name"),
-            ),
-            TextButton(
-                onPressed: () {
-                  var r = context.read<BreadCrumbNotifier>();
-                  r.add(breadcrumb: breadcrumb(name: _controller.text));
-                  Navigator.of(context).pop();
-                },
-                child: Text("ADD"))
-          ],
-        ));
   }
 }
 
@@ -72,57 +34,115 @@ class MyHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print("build in homepage=\n");
+    print("build in myhomepage");
 
     return Scaffold(
-        appBar: AppBar(
-          title: Text(" ProviderDemo"),
-        ),
+        appBar: AppBar(title: Text("Demo Provider part 2")),
         body: Column(
           children: [
-            Consumer<BreadCrumbNotifier>(builder: (context, abc, child) {
-              return Wrap(
-                children: abc._breadcrumbs.map((e) {
-                  String extra = (e._isActive) ? ">" : "";
-                  return Text(e.name + extra);
-                }).toList(),
-              );
-            }),
+            Row(
+              children: [ExpensiveContainer(), CheapContainer()],
+            ),
             TextButton(
                 onPressed: () {
-                  Navigator.of(context).pushNamed("/Addscreen");
+                  var provider = context.read<ProviderObject>();
+                  provider.start();
                 },
-                child: Text("Add")),
-            TextButton(onPressed: () {}, child: Text("Reset")),
+                child: Text("Start")),
+            TextButton(
+                onPressed: () {
+                  var provider = context.read<ProviderObject>();
+                  provider.stop();
+                },
+                child: Text("Stop")),
           ],
         ));
   }
 }
 
-class breadcrumb {
-  final String name;
-  bool _isActive = false;
-  breadcrumb({required this.name});
-}
+class ExpensiveContainer extends StatelessWidget {
+  const ExpensiveContainer({super.key});
 
-class BreadCrumbNotifier extends ChangeNotifier {
-  List<breadcrumb> _breadcrumbs = [];
-  UnmodifiableListView<String> get breadcrumbs =>
-      _breadcrumbs as UnmodifiableListView<String>;
-  void add({required breadcrumb breadcrumb}) {
-    if (_breadcrumbs.isEmpty) {
-      _breadcrumbs.add(breadcrumb);
-    } else {
-      _breadcrumbs[_breadcrumbs.length - 1]._isActive = true;
-      _breadcrumbs.add(breadcrumb);
-    }
-    notifyListeners();
+  @override
+  Widget build(BuildContext context) {
+    print("build in Expensive");
+    var provider = context.select<ProviderObject, ExpensiveObject>(
+        (provider) => provider.expensiveObject);
+    return Container(
+      color: Colors.amber,
+      height: 100,
+      child: Column(children: [
+        Text("Expensive Widget"),
+        Text("Last updated"),
+        Text(provider.datetime)
+      ]),
+    );
   }
 }
 
-class BreadCrumbProvider extends ChangeNotifierProvider<BreadCrumbNotifier> {
+class CheapContainer extends StatelessWidget {
+  const CheapContainer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    print("build in cheap");
+    var provider = context.select<ProviderObject, CheapObject>(
+        (provider) => provider.cheapObject);
+    return Container(
+      color: Colors.blue,
+      height: 100,
+      child: Column(children: [
+        Text("Cheap Widget"),
+        Text("Last updated"),
+        Text(provider.datetime)
+      ]),
+    );
+  }
+}
+
+class ExpensiveObject {
+  String datetime;
+  ExpensiveObject() : datetime = DateTime.now().toIso8601String();
+}
+
+class CheapObject {
+  String datetime;
+  CheapObject() : datetime = DateTime.now().toIso8601String();
+}
+
+class ProviderObject extends ChangeNotifier {
+  late ExpensiveObject expensiveObject;
+  late CheapObject cheapObject;
+  late StreamSubscription _expensive;
+  late StreamSubscription _cheap;
+  ProviderObject() {
+    expensiveObject = ExpensiveObject();
+    cheapObject = CheapObject();
+  }
+  void start() {
+    _expensive = Stream.periodic(
+      const Duration(seconds: 2),
+    ).listen((event) {
+      expensiveObject = ExpensiveObject();
+      notifyListeners();
+    });
+    _cheap = Stream.periodic(
+      const Duration(seconds: 1),
+    ).listen((event) {
+      cheapObject = CheapObject();
+      notifyListeners();
+    });
+  }
+
+  void stop() {
+    _expensive.cancel();
+    _cheap.cancel();
+  }
+}
+
+class ProviderWidget extends ChangeNotifierProvider<ProviderObject> {
   Key? key;
   Widget? child;
-  BreadCrumbProvider({Key? key, required super.create, required this.child})
+  ProviderWidget({Key? key, required Widget child, required super.create})
       : super(key: key, child: child);
 }
